@@ -240,7 +240,7 @@
         });
 
         if (data.success) {
-          let html = '<strong>Connection Successful!</strong>\n' + data.message;
+          let html = '<strong>Connection Successful!</strong>\n' + escapeHtml(data.message);
           if (data.server) {
             html += '\n<div class="server-info">';
             html += '<strong>Server Version:</strong> ' + escapeHtml(data.server.version) + '\n';
