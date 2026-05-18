@@ -1,0 +1,23 @@
+{
+  "name": "windsurf-mysql-connector",
+  "version": "1.0.0",
+  "description": "MySQL connection testing tool with robust handling for hosting security challenges (WAF/Cloudflare)",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "lint": "eslint . --ext .js",
+    "test": "node --test test/index.test.js"
+  },
+  "keywords": ["mysql", "connection", "security", "waf", "cloudflare"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mysql2": "^3.6.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "eslint": "^8.50.0"
+  }
+}
