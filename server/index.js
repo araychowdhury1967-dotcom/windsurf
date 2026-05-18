@@ -11,6 +11,7 @@
 const express = require('express');
 const cors = require('cors');
 const { testConnection } = require('../lib/mysql-connector');
+const { saveSettings, getSettings, deleteSettings } = require('../lib/settings-manager');
 const { safeJsonParse } = require('../lib/response-validator');
 const { withRetry } = require('../lib/retry-handler');
 
@@ -251,6 +252,211 @@ app.post('/api/proxy-request', async (req, res) => {
       troubleshooting: [
         'Verify the URL is correct and the remote server is running.',
         'Check network connectivity from this server.'
+      ]
+    });
+  }
+});
+
+/**
+ * Save settings records to MySQL.
+ *
+ * POST /api/save-settings
+ * Body: { host, port, user, password, database, ssl?, records: [{key, value}] }
+ */
+app.post('/api/save-settings', async (req, res) => {
+  const { host, port, user, password, database, ssl, records } = req.body;
+
+  if (!host || !user) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required fields: host and user are required.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  if (password === undefined || password === null) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required field: password.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  if (!database) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required field: database.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  if (!Array.isArray(records) || records.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required field: records (array of {key, value}).',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  try {
+    const creds = { host, port: port || 3306, user, password, database, ssl: ssl || false };
+    const result = await withRetry(
+      async () => {
+        const saveResult = await saveSettings(creds, records);
+        if (!saveResult.success && saveResult.error) {
+          const retryableCodes = ['ECONNRESET', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST', 'EPIPE'];
+          if (retryableCodes.includes(saveResult.error.code)) {
+            const error = new Error(saveResult.message);
+            error.code = saveResult.error.code;
+            error.saveResult = saveResult;
+            throw error;
+          }
+        }
+        return saveResult;
+      },
+      { maxRetries: 2 },
+      (attempt, delay, err) => {
+        console.log(`Save settings retry ${attempt} after ${delay}ms due to: ${err.code || err.message}`);
+      }
+    );
+
+    const statusCode = result.success ? 200 : 400;
+    return res.status(statusCode).json(result);
+  } catch (err) {
+    if (err.saveResult) {
+      return res.status(400).json(err.saveResult);
+    }
+
+    console.error('Unexpected error saving settings:', err);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to save settings records to MySQL: ${err.message}`,
+      error: {
+        code: err.code || 'INTERNAL_ERROR',
+        sqlMessage: err.message
+      },
+      troubleshooting: [
+        'Check the server logs for more details.',
+        'Verify the MySQL credentials and host are correct.',
+        'Ensure the user has CREATE and INSERT privileges on the database.'
+      ]
+    });
+  }
+});
+
+/**
+ * Retrieve settings records from MySQL.
+ *
+ * POST /api/get-settings
+ * Body: { host, port, user, password, database, ssl?, keys?: string[] }
+ */
+app.post('/api/get-settings', async (req, res) => {
+  const { host, port, user, password, database, ssl, keys } = req.body;
+
+  if (!host || !user) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required fields: host and user are required.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  if (password === undefined || password === null) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required field: password.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  if (!database) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required field: database.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  try {
+    const creds = { host, port: port || 3306, user, password, database, ssl: ssl || false };
+    const result = await getSettings(creds, keys);
+    const statusCode = result.success ? 200 : 400;
+    return res.status(statusCode).json(result);
+  } catch (err) {
+    console.error('Unexpected error retrieving settings:', err);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to retrieve settings from MySQL: ${err.message}`,
+      error: {
+        code: err.code || 'INTERNAL_ERROR',
+        sqlMessage: err.message
+      },
+      troubleshooting: [
+        'Check the server logs for more details.',
+        'Verify the MySQL credentials and host are correct.'
+      ]
+    });
+  }
+});
+
+/**
+ * Delete settings records from MySQL.
+ *
+ * POST /api/delete-settings
+ * Body: { host, port, user, password, database, ssl?, keys: string[] }
+ */
+app.post('/api/delete-settings', async (req, res) => {
+  const { host, port, user, password, database, ssl, keys } = req.body;
+
+  if (!host || !user) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required fields: host and user are required.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  if (password === undefined || password === null) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required field: password.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  if (!database) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required field: database.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  if (!Array.isArray(keys) || keys.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required field: keys (array of setting keys to delete).',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  try {
+    const creds = { host, port: port || 3306, user, password, database, ssl: ssl || false };
+    const result = await deleteSettings(creds, keys);
+    const statusCode = result.success ? 200 : 400;
+    return res.status(statusCode).json(result);
+  } catch (err) {
+    console.error('Unexpected error deleting settings:', err);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to delete settings from MySQL: ${err.message}`,
+      error: {
+        code: err.code || 'INTERNAL_ERROR',
+        sqlMessage: err.message
+      },
+      troubleshooting: [
+        'Check the server logs for more details.',
+        'Verify the MySQL credentials and host are correct.'
       ]
     });
   }

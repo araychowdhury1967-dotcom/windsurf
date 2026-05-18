@@ -49,6 +49,52 @@ Test a MySQL connection.
 }
 ```
 
+### `POST /api/save-settings`
+Save key-value settings records to a MySQL database. Auto-creates the `app_settings` table.
+
+```json
+{
+  "host": "localhost",
+  "port": 3306,
+  "user": "root",
+  "password": "mypassword",
+  "database": "mydb",
+  "ssl": false,
+  "records": [
+    { "key": "site_name", "value": "My App" },
+    { "key": "theme", "value": "dark" }
+  ]
+}
+```
+
+### `POST /api/get-settings`
+Retrieve stored settings. Optionally pass `keys` to filter.
+
+```json
+{
+  "host": "localhost",
+  "port": 3306,
+  "user": "root",
+  "password": "mypassword",
+  "database": "mydb",
+  "keys": ["site_name", "theme"]
+}
+```
+
+### `POST /api/delete-settings`
+Delete settings by key.
+
+```json
+{
+  "host": "localhost",
+  "port": 3306,
+  "user": "root",
+  "password": "mypassword",
+  "database": "mydb",
+  "keys": ["old_setting"]
+}
+```
+
 ### `POST /api/proxy-request`
 Proxy an external API request server-side to bypass WAF/security challenges.
 
@@ -75,6 +121,7 @@ windsurf/
   server/         - Express API server
   lib/
     mysql-connector.js     - MySQL connection logic with error mapping
+    settings-manager.js    - Settings CRUD operations (save/get/delete)
     response-validator.js  - HTML security challenge detection
     retry-handler.js       - Exponential backoff retry logic
   test/           - Unit tests

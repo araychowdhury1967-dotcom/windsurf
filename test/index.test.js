@@ -16,6 +16,11 @@ const {
   ERROR_DESCRIPTIONS
 } = require('../lib/mysql-connector');
 
+const {
+  SETTINGS_TABLE,
+  buildConnectionConfig,
+} = require('../lib/settings-manager');
+
 // -- response-validator tests --
 
 describe('detectSecurityChallenge', () => {
@@ -217,5 +222,149 @@ describe('ERROR_DESCRIPTIONS', () => {
 
   it('has description for ER_BAD_DB_ERROR', () => {
     assert.ok(ERROR_DESCRIPTIONS.ER_BAD_DB_ERROR);
+  });
+});
+
+// -- settings-manager tests --
+
+describe('SETTINGS_TABLE', () => {
+  it('is a non-empty string', () => {
+    assert.equal(typeof SETTINGS_TABLE, 'string');
+    assert.ok(SETTINGS_TABLE.length > 0);
+  });
+});
+
+describe('buildConnectionConfig', () => {
+  it('builds config with required fields', () => {
+    const config = buildConnectionConfig({
+      host: 'myhost',
+      user: 'myuser',
+      password: 'mypass'
+    });
+    assert.equal(config.host, 'myhost');
+    assert.equal(config.user, 'myuser');
+    assert.equal(config.password, 'mypass');
+    assert.equal(config.port, 3306);
+  });
+
+  it('uses provided port', () => {
+    const config = buildConnectionConfig({
+      host: 'h',
+      user: 'u',
+      password: 'p',
+      port: 3307
+    });
+    assert.equal(config.port, 3307);
+  });
+
+  it('includes database when provided', () => {
+    const config = buildConnectionConfig({
+      host: 'h',
+      user: 'u',
+      password: 'p',
+      database: 'testdb'
+    });
+    assert.equal(config.database, 'testdb');
+  });
+
+  it('does not include database when not provided', () => {
+    const config = buildConnectionConfig({
+      host: 'h',
+      user: 'u',
+      password: 'p'
+    });
+    assert.equal(config.database, undefined);
+  });
+
+  it('adds ssl config when ssl is true', () => {
+    const config = buildConnectionConfig({
+      host: 'h',
+      user: 'u',
+      password: 'p',
+      ssl: true
+    });
+    assert.ok(config.ssl);
+    assert.equal(config.ssl.rejectUnauthorized, true);
+  });
+
+  it('does not add ssl config when ssl is false', () => {
+    const config = buildConnectionConfig({
+      host: 'h',
+      user: 'u',
+      password: 'p',
+      ssl: false
+    });
+    assert.equal(config.ssl, undefined);
+  });
+});
+
+describe('saveSettings validation', () => {
+  const { saveSettings } = require('../lib/settings-manager');
+
+  it('returns error when database is missing', async () => {
+    const result = await saveSettings(
+      { host: 'h', user: 'u', password: 'p' },
+      [{ key: 'k', value: 'v' }]
+    );
+    assert.equal(result.success, false);
+    assert.ok(result.message.includes('database'));
+  });
+
+  it('returns error when records array is empty', async () => {
+    const result = await saveSettings(
+      { host: 'h', user: 'u', password: 'p', database: 'db' },
+      []
+    );
+    assert.equal(result.success, false);
+    assert.ok(result.message.includes('record'));
+  });
+
+  it('returns error when records is not an array', async () => {
+    const result = await saveSettings(
+      { host: 'h', user: 'u', password: 'p', database: 'db' },
+      'not-array'
+    );
+    assert.equal(result.success, false);
+  });
+
+  it('returns error when a record has no key', async () => {
+    const result = await saveSettings(
+      { host: 'h', user: 'u', password: 'p', database: 'db' },
+      [{ key: '', value: 'v' }]
+    );
+    assert.equal(result.success, false);
+    assert.ok(result.message.includes('key'));
+  });
+});
+
+describe('getSettings validation', () => {
+  const { getSettings } = require('../lib/settings-manager');
+
+  it('returns error when database is missing', async () => {
+    const result = await getSettings({ host: 'h', user: 'u', password: 'p' });
+    assert.equal(result.success, false);
+    assert.ok(result.message.includes('database'));
+  });
+});
+
+describe('deleteSettings validation', () => {
+  const { deleteSettings } = require('../lib/settings-manager');
+
+  it('returns error when database is missing', async () => {
+    const result = await deleteSettings(
+      { host: 'h', user: 'u', password: 'p' },
+      ['k']
+    );
+    assert.equal(result.success, false);
+    assert.ok(result.message.includes('database'));
+  });
+
+  it('returns error when keys array is empty', async () => {
+    const result = await deleteSettings(
+      { host: 'h', user: 'u', password: 'p', database: 'db' },
+      []
+    );
+    assert.equal(result.success, false);
+    assert.ok(result.message.includes('key'));
   });
 });
