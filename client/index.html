@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MySQL Connection Tester</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+      color: #1a1a2e;
+    }
+    .subtitle {
+      color: #666;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+    }
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      color: #444;
+    }
+    input {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      transition: border-color 0.2s;
+    }
+    input:focus {
+      outline: none;
+      border-color: #4361ee;
+      box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.15);
+    }
+    .row {
+      display: flex;
+      gap: 1rem;
+    }
+    .row .form-group { flex: 1; }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .checkbox-group input { width: auto; }
+    .checkbox-group label { margin: 0; font-weight: 400; }
+    button {
+      width: 100%;
+      padding: 0.625rem;
+      background: #4361ee;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #3a56d4; }
+    button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+    .result {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: none;
+    }
+    .result.success {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+      display: block;
+    }
+    .result.error {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+      display: block;
+    }
+    .result.loading {
+      background: #cce5ff;
+      border: 1px solid #b8daff;
+      color: #004085;
+      display: block;
+    }
+    .troubleshooting {
+      margin-top: 0.75rem;
+      padding: 0.75rem;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 4px;
+      font-size: 0.8125rem;
+      color: #856404;
+    }
+    .troubleshooting h4 { margin-bottom: 0.5rem; }
+    .troubleshooting ul { padding-left: 1.25rem; }
+    .troubleshooting li { margin-bottom: 0.25rem; }
+    .server-info {
+      margin-top: 0.75rem;
+      padding: 0.75rem;
+      background: #e9ecef;
+      border-radius: 4px;
+      font-size: 0.8125rem;
+    }
+    .server-info strong { color: #333; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>MySQL Connection Tester</h1>
+    <p class="subtitle">
+      Test MySQL connections server-side to bypass WAF/security challenges
+      that block browser-based API requests.
+    </p>
+
+    <form id="connectionForm">
+      <div class="row">
+        <div class="form-group">
+          <label for="host">Host</label>
+          <input type="text" id="host" placeholder="localhost or IP address" required>
+        </div>
+        <div class="form-group" style="max-width: 120px;">
+          <label for="port">Port</label>
+          <input type="number" id="port" value="3306" placeholder="3306">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="form-group">
+          <label for="user">Username</label>
+          <input type="text" id="user" placeholder="root" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="password" required>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="database">Database (optional)</label>
+        <input type="text" id="database" placeholder="my_database">
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="ssl">
+        <label for="ssl">Use SSL/TLS connection</label>
+      </div>
+
+      <button type="submit" id="testBtn">Test Connection</button>
+    </form>
+
+    <div id="result" class="result"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('connectionForm');
+    const resultDiv = document.getElementById('result');
+    const testBtn = document.getElementById('testBtn');
+
+    /**
+     * Safely fetch JSON from our server-side API.
+     * Detects HTML security challenges before attempting JSON parse.
+     */
+    async function safeFetch(url, options) {
+      const response = await fetch(url, options);
+      const text = await response.text();
+      const contentType = response.headers.get('content-type') || '';
+
+      // Detect if we got HTML instead of JSON (security challenge)
+      if (!contentType.includes('application/json') && text.trim().startsWith('<')) {
+        throw new Error(
+          'Hosting security challenge returned HTML instead of JSON. ' +
+          'Refresh the page, then retry. If it repeats, this host is blocking API requests.'
+        );
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(
+          'Invalid JSON response from server. ' +
+          'Response preview: ' + text.substring(0, 200)
+        );
+      }
+    }
+
+    function showResult(type, message) {
+      resultDiv.className = 'result ' + type;
+      resultDiv.innerHTML = message;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      testBtn.disabled = true;
+      testBtn.textContent = 'Testing...';
+      showResult('loading', 'Connecting to MySQL server...');
+
+      const payload = {
+        host: document.getElementById('host').value.trim(),
+        port: parseInt(document.getElementById('port').value, 10) || 3306,
+        user: document.getElementById('user').value.trim(),
+        password: document.getElementById('password').value,
+        database: document.getElementById('database').value.trim() || undefined,
+        ssl: document.getElementById('ssl').checked
+      };
+
+      try {
+        const data = await safeFetch('/api/test-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (data.success) {
+          let html = '<strong>Connection Successful!</strong>\n' + data.message;
+          if (data.server) {
+            html += '\n<div class="server-info">';
+            html += '<strong>Server Version:</strong> ' + escapeHtml(data.server.version) + '\n';
+            html += '<strong>Host:</strong> ' + escapeHtml(data.server.host) + ':' + data.server.port + '\n';
+            html += '<strong>Database:</strong> ' + escapeHtml(data.server.database) + '\n';
+            if (data.server.databases && data.server.databases.length > 0) {
+              html += '<strong>Available Databases:</strong> ' + data.server.databases.map(escapeHtml).join(', ');
+            }
+            html += '</div>';
+          }
+          if (data.latencyMs !== undefined) {
+            html += '\n<em>Latency: ' + data.latencyMs + 'ms</em>';
+          }
+          showResult('success', html);
+        } else {
+          let html = '<strong>Connection Failed</strong>\n' + escapeHtml(data.message);
+          if (data.error) {
+            html += '\n\nError Code: ' + escapeHtml(data.error.code || 'Unknown');
+            if (data.error.sqlMessage) {
+              html += '\nSQL Message: ' + escapeHtml(data.error.sqlMessage);
+            }
+          }
+          if (data.troubleshooting && data.troubleshooting.length > 0) {
+            html += '\n<div class="troubleshooting"><h4>Troubleshooting Steps:</h4><ul>';
+            data.troubleshooting.forEach(function(step) {
+              html += '<li>' + escapeHtml(step) + '</li>';
+            });
+            html += '</ul></div>';
+          }
+          showResult('error', html);
+        }
+      } catch (err) {
+        let html = '<strong>Error</strong>\n' + escapeHtml(err.message);
+        html += '\n<div class="troubleshooting"><h4>Troubleshooting Steps:</h4><ul>';
+        html += '<li>Make sure the backend server is running (npm start).</li>';
+        html += '<li>If you see an HTML security challenge error, your hosting WAF is blocking requests.</li>';
+        html += '<li>Use the server-side proxy endpoint to bypass WAF restrictions.</li>';
+        html += '<li>Check your hosting provider\'s firewall/WAF settings.</li>';
+        html += '</ul></div>';
+        showResult('error', html);
+      } finally {
+        testBtn.disabled = false;
+        testBtn.textContent = 'Test Connection';
+      }
+    });
+
+    function escapeHtml(str) {
+      if (typeof str !== 'string') return String(str);
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>
