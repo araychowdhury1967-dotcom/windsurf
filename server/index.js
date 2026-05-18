@@ -151,6 +151,51 @@ app.post('/api/proxy-request', async (req, res) => {
     });
   }
 
+  // Validate URL to prevent SSRF attacks
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch (_urlErr) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid URL format.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  // Only allow HTTP and HTTPS protocols
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Only http and https URLs are allowed.',
+      error: { code: 'VALIDATION_ERROR' }
+    });
+  }
+
+  // Block requests to private/internal IP ranges
+  const hostname = parsedUrl.hostname;
+  const privatePatterns = [
+    /^localhost$/i,
+    /^127\./,
+    /^10\./,
+    /^172\.(1[6-9]|2[0-9]|3[01])\./,
+    /^192\.168\./,
+    /^169\.254\./,
+    /^0\./,
+    /^\[::1\]$/,
+    /^\[fc/i,
+    /^\[fd/i,
+    /^\[fe80:/i
+  ];
+
+  if (privatePatterns.some(pattern => pattern.test(hostname))) {
+    return res.status(403).json({
+      success: false,
+      message: 'Requests to private/internal addresses are not allowed.',
+      error: { code: 'FORBIDDEN' }
+    });
+  }
+
   try {
     const fetchOptions = {
       method: method || 'POST',
