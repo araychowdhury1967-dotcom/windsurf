@@ -212,7 +212,7 @@ app.post('/api/proxy-request', async (req, res) => {
       fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await fetch(url, { ...fetchOptions, redirect: 'manual' });
     const responseText = await response.text();
     const contentType = response.headers.get('content-type') || '';
 
