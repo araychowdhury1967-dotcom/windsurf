@@ -335,7 +335,7 @@ app.post('/api/save-settings', async (req, res) => {
         }
         return saveResult;
       },
-      { maxRetries: 2 },
+      { maxRetries: 2, retryableErrors: ['ECONNRESET', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST', 'EPIPE', 'ECONNREFUSED', 'EAI_AGAIN', 'ER_LOCK_DEADLOCK'] },
       (attempt, delay, err) => {
         try {
           console.log(`Save settings retry ${attempt} after ${delay}ms due to: ${err.code || err.message}`);
