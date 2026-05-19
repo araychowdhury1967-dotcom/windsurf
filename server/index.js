@@ -184,6 +184,7 @@ app.post('/api/proxy-request', async (req, res) => {
     /^169\.254\./,
     /^0\./,
     /^\[::1\]$/,
+    /^\[::ffff:/i,
     /^\[fc/i,
     /^\[fd/i,
     /^\[fe80:/i
