@@ -495,6 +495,59 @@ app.use('/api/*', (req, res) => {
   });
 });
 
+/**
+ * JSON error handler for API routes.
+ *
+ * Ensures every error from `/api/*` (including malformed JSON bodies from
+ * `express.json()`, payload-too-large, and any other unhandled error)
+ * returns a structured JSON response rather than Express's default HTML
+ * error page. This keeps clients like the browser frontend from seeing
+ * raw HTML when an endpoint fails, which previously surfaced as
+ * `Failed to save settings records to MySQL: Database API failed (500)`
+ * style errors on the client.
+ */
+// eslint-disable-next-line no-unused-vars
+app.use('/api/*', (err, req, res, _next) => {
+  console.error(`API error on ${req.method} ${req.originalUrl}:`, err);
+
+  // body-parser sets err.type and err.status on its own errors.
+  const isBodyParseError =
+    err.type === 'entity.parse.failed' ||
+    err instanceof SyntaxError;
+  const isPayloadTooLarge = err.type === 'entity.too.large';
+
+  let statusCode;
+  let code;
+  let message;
+  if (isBodyParseError) {
+    statusCode = 400;
+    code = 'INVALID_JSON';
+    message =
+      'Invalid JSON in request body. Send a JSON-encoded body with ' +
+      'Content-Type: application/json.';
+  } else if (isPayloadTooLarge) {
+    statusCode = 413;
+    code = 'PAYLOAD_TOO_LARGE';
+    message = 'Request body is too large.';
+  } else {
+    statusCode = err.status || err.statusCode || 500;
+    code = err.code || 'INTERNAL_ERROR';
+    message =
+      err.expose && err.message
+        ? err.message
+        : `Server error processing ${req.method} ${req.originalUrl}.`;
+  }
+
+  res.status(statusCode).json({
+    success: false,
+    message,
+    error: {
+      code,
+      details: err.message || String(err)
+    }
+  });
+});
+
 // Start server
 if (require.main === module) {
   app.listen(PORT, () => {
