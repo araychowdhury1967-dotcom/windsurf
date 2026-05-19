@@ -302,9 +302,30 @@ app.post('/api/save-settings', async (req, res) => {
     const creds = { host, port: port || 3306, user, password, database, ssl: ssl || false };
     const result = await withRetry(
       async () => {
-        const saveResult = await saveSettings(creds, records);
+        let saveResult;
+        try {
+          saveResult = await saveSettings(creds, records);
+        } catch (innerErr) {
+          const fallback = innerErr.message || String(innerErr);
+          return {
+            success: false,
+            message: `Failed to save settings records to MySQL: ${fallback}`,
+            error: {
+              code: innerErr.code || 'INTERNAL_ERROR',
+              errno: innerErr.errno || null,
+              sqlState: innerErr.sqlState || null,
+              sqlMessage: fallback,
+              fatal: innerErr.fatal || false
+            },
+            troubleshooting: [
+              'Check the server logs for more details.',
+              'Verify the MySQL credentials and host are correct.',
+              'Ensure the user has CREATE and INSERT privileges on the database.'
+            ]
+          };
+        }
         if (!saveResult.success && saveResult.error) {
-          const retryableCodes = ['ECONNRESET', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST', 'EPIPE'];
+          const retryableCodes = ['ECONNRESET', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST', 'EPIPE', 'ECONNREFUSED', 'EAI_AGAIN'];
           if (retryableCodes.includes(saveResult.error.code)) {
             const error = new Error(saveResult.message);
             error.code = saveResult.error.code;
@@ -328,12 +349,13 @@ app.post('/api/save-settings', async (req, res) => {
     }
 
     console.error('Unexpected error saving settings:', err);
+    const fallbackMessage = err.message || String(err);
     return res.status(500).json({
       success: false,
-      message: `Failed to save settings records to MySQL: ${err.message}`,
+      message: `Failed to save settings records to MySQL: ${fallbackMessage}`,
       error: {
         code: err.code || 'INTERNAL_ERROR',
-        sqlMessage: err.message
+        sqlMessage: fallbackMessage
       },
       troubleshooting: [
         'Check the server logs for more details.',
@@ -481,6 +503,9 @@ if (require.main === module) {
     console.log(`  GET  http://localhost:${PORT}/api/health`);
     console.log(`  POST http://localhost:${PORT}/api/test-connection`);
     console.log(`  POST http://localhost:${PORT}/api/proxy-request`);
+    console.log(`  POST http://localhost:${PORT}/api/save-settings`);
+    console.log(`  POST http://localhost:${PORT}/api/get-settings`);
+    console.log(`  POST http://localhost:${PORT}/api/delete-settings`);
   });
 }
 
